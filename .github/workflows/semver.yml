@@ -1,0 +1,27 @@
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container: eatzy/semver:latest
+    steps:
+      - uses: actions/checkout@master
+      - name: Git config Setup
+        run: |
+          git config --global user.email "ci@eatzy.com"
+          git config --global user.name "Eatzy CI"
+          git config --global --add safe.directory '*'
+      - name: Extract branch name
+        shell: bash
+        run: echo "branch=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}" >> $GITHUB_OUTPUT
+        id: extract_branch
+      - name: Calling SemVer
+        run: |
+          semver
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BRANCH_NAME: ${{ steps.extract_branch.outputs.branch }}
+          GITHUB_ACTION_BRANCH: master
