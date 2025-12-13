@@ -1,6 +1,39 @@
-# Auth Service
+# 🔐 Eatzy Auth Service
 
-JWT-based authentication service that integrates with the existing API service for user verification.
+**Unified Authentication Service for All Eatzy Applications**
+
+A centralized JWT-based authentication service that provides secure, scalable authentication for the entire Eatzy ecosystem. This service acts as the single source of truth for user authentication across all applications and services.
+
+## 🌐 **Universal Token Support**
+
+**One Token, All Services** - JWT tokens issued by this auth-service can be used across:
+
+### ✅ **Supported Applications & Services:**
+- **🍽️ Eatzy API** (`api.eatsy.local`) - Main food delivery API
+- **🎯 Kudoz App React** (`kudoz-app-react`) - Loyalty & rewards frontend
+- **🏪 Consumer Portal** (`consumer-portal`) - Customer web application  
+- **📱 Mobile Apps** (iOS/Android) - Native mobile applications
+- **🔧 Admin Dashboard** - Internal management tools
+- **📊 Analytics Services** - Data and reporting services
+- **🔌 Future Services** - Any new service can integrate easily
+
+### 🔑 **Token Compatibility:**
+```bash
+# Same JWT token works everywhere:
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+
+# ✅ Works in Eatzy API
+curl -H "Authorization: Bearer TOKEN" http://api.eatsy.local/account/profile
+
+# ✅ Works in Kudoz App  
+curl -H "Authorization: Bearer TOKEN" http://kudoz-app/api/user
+
+# ✅ Works in Consumer Portal
+curl -H "Authorization: Bearer TOKEN" http://consumer-portal/api/orders
+
+# ✅ Works in any future service
+curl -H "Authorization: Bearer TOKEN" http://new-service/api/endpoint
+```
 
 ## 🚀 Quick Start
 
@@ -104,14 +137,14 @@ curl -X GET http://localhost:3001/api/auth/me \
 }
 ```
 
-## 🔧 Integration Examples
+## 🔧 **Service Integration Guide**
 
-### React/Frontend Integration
+### 🎯 **For Frontend Applications (React, Vue, Angular)**
 
 ```javascript
-// Sign in
+// 1. Sign in and get universal token
 const signIn = async (email, password) => {
-  const response = await fetch('http://localhost:3001/api/auth/sign-in', {
+  const response = await fetch('https://eatzy-auth.intern.eatzy.com/api/auth/sign-in', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password })
@@ -120,40 +153,56 @@ const signIn = async (email, password) => {
   const data = await response.json()
   
   if (data.success) {
-    localStorage.setItem('token', data.token)
+    // Store token - works for ALL Eatzy services
+    localStorage.setItem('eatzy_token', data.token)
     return data.user
   }
   
   throw new Error(data.error)
 }
 
-// Get current user
-const getCurrentUser = async () => {
-  const token = localStorage.getItem('token')
+// 2. Use token with ANY Eatzy service
+const callAnyEatzyService = async (serviceUrl, endpoint) => {
+  const token = localStorage.getItem('eatzy_token')
   
-  const response = await fetch('http://localhost:3001/api/auth/me', {
-    headers: { 'Authorization': `Bearer ${token}` }
+  const response = await fetch(`${serviceUrl}${endpoint}`, {
+    headers: { 
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    }
   })
   
   return response.json()
 }
+
+// Examples:
+// ✅ Call Eatzy API
+await callAnyEatzyService('http://api.eatsy.local', '/account/profile')
+
+// ✅ Call Kudoz Service  
+await callAnyEatzyService('http://kudoz-app', '/api/user')
+
+// ✅ Call Consumer Portal API
+await callAnyEatzyService('http://consumer-portal', '/api/orders')
 ```
 
-### Node.js/Backend Integration
+### 🔧 **For Backend Services (Node.js, PHP, Python)**
 
+#### **Node.js Integration:**
 ```javascript
-// Middleware to verify JWT tokens
-const verifyToken = async (req, res, next) => {
+// Universal auth middleware for any Node.js service
+const eatzyAuthMiddleware = async (req, res, next) => {
   const authHeader = req.headers.authorization
   
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Authorization header missing' })
+  if (!authHeader?.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Authorization required' })
   }
   
   const token = authHeader.substring(7)
   
   try {
-    const response = await fetch('http://localhost:3001/api/verify', {
+    // Verify with central auth service
+    const response = await fetch('https://eatzy-auth.intern.eatzy.com/api/verify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token })
@@ -162,15 +211,166 @@ const verifyToken = async (req, res, next) => {
     const data = await response.json()
     
     if (data.valid) {
-      req.user = data.user
+      req.user = data.user  // User available in all routes
       next()
     } else {
       res.status(401).json({ error: 'Invalid token' })
     }
   } catch (error) {
-    res.status(500).json({ error: 'Token verification failed' })
+    res.status(500).json({ error: 'Auth service unavailable' })
   }
 }
+
+// Use in any Node.js service:
+app.use('/api', eatzyAuthMiddleware)  // Protect all /api routes
+```
+
+#### **PHP Integration (Eatzy API):**
+```php
+<?php
+// Enhanced OAuth filter already supports JWT tokens from auth-service
+// File: api/web/public/task/Filter/Impl/Auth/OAuthValidAccessTokenAuthFilter.php
+
+class OAuthValidAccessTokenAuthFilter extends Filter {
+    protected function isValid(TaskInput $input): FilterResult {
+        // Automatically detects and validates:
+        // ✅ Legacy OAuth tokens (40-char hex)
+        // ✅ JWT tokens from auth-service (Better Auth format)
+        
+        // No code changes needed - works with both token types!
+    }
+}
+
+// Usage in any API endpoint:
+// Authorization: Bearer <legacy-oauth-token>  ✅ Works
+// Authorization: Bearer <jwt-from-auth-service>  ✅ Works
+?>
+```
+
+### 📱 **For Mobile Apps (iOS/Android)**
+
+```swift
+// iOS Swift Example
+class EatzyAuthService {
+    private let authBaseURL = "https://eatzy-auth.intern.eatzy.com"
+    
+    func signIn(email: String, password: String) async throws -> User {
+        // Get universal token
+        let token = try await authenticate(email: email, password: password)
+        
+        // Store securely - works for ALL Eatzy API calls
+        KeychainHelper.store(token, forKey: "eatzy_universal_token")
+        
+        return user
+    }
+    
+    func callAnyEatzyAPI(baseURL: String, endpoint: String) async throws -> Data {
+        guard let token = KeychainHelper.retrieve(forKey: "eatzy_universal_token") else {
+            throw AuthError.noToken
+        }
+        
+        var request = URLRequest(url: URL(string: "\(baseURL)\(endpoint)")!)
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        
+        let (data, _) = try await URLSession.shared.data(for: request)
+        return data
+    }
+}
+
+// Use with any service:
+// ✅ Eatzy API: await callAnyEatzyAPI("http://api.eatsy.local", "/account/profile")
+// ✅ Kudoz API: await callAnyEatzyAPI("http://kudoz-app", "/api/user")
+```
+
+## 🔐 **Universal Authentication Architecture**
+
+### **🏗️ Centralized Auth Flow:**
+```
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   Any Client    │───▶│   Auth-Service   │───▶│  Eatzy API      │
+│ (Web/Mobile/API)│    │ (JWT Generator)  │    │ (User Verify)   │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+                                │
+                                ▼
+                       ┌──────────────────┐
+                       │  Universal JWT   │◀─── Used by ALL services
+                       │     Token        │
+                       └──────────────────┘
+                                │
+                    ┌───────────┼───────────┐
+                    ▼           ▼           ▼
+            ┌─────────────┐ ┌─────────┐ ┌─────────────┐
+            │ Kudoz App   │ │ API     │ │ Consumer    │
+            │ React       │ │ Service │ │ Portal      │
+            └─────────────┘ └─────────┘ └─────────────┘
+```
+
+### **🔑 Authentication Methods:**
+
+#### **1. Email/Password Authentication**
+```
+User → Auth-Service → Eatzy API (/account/authorize) → Legacy Database → JWT Token
+```
+- **Primary Method**: Uses existing user database
+- **Endpoint**: `POST /api/auth/sign-in/email`
+- **Verification**: Against existing Eatzy user accounts
+- **Output**: Universal JWT token for all services
+
+#### **2. Social Authentication**
+```
+User → Auth-Service → Social Provider (Google/Facebook) → Auth-Service DB → JWT Token
+```
+- **Secondary Method**: For new user acquisition
+- **Providers**: Google, Facebook (configurable)
+- **Storage**: Auth-service database (separate from main DB)
+- **Output**: Same universal JWT token format
+
+#### **3. Legacy OAuth Support**
+```
+Existing Apps → Eatzy API → Enhanced Filter → Validates Both Token Types
+```
+- **Backward Compatibility**: Legacy 40-char OAuth tokens still work
+- **Smart Detection**: API automatically detects token type
+- **Gradual Migration**: No breaking changes for existing apps
+
+### **🌐 Universal Endpoints:**
+
+#### **Authentication (Any Client → Auth-Service):**
+```bash
+# Email/Password Login
+curl -X POST https://eatzy-auth.intern.eatzy.com/api/auth/sign-in/email \
+  -H "Content-Type: application/json" \
+  -d '{"email":"user@eatzy.com","password":"password123"}'
+
+# Social Login (Google)
+GET https://eatzy-auth.intern.eatzy.com/api/auth/google
+
+# Social Login (Facebook)  
+GET https://eatzy-auth.intern.eatzy.com/api/auth/facebook
+
+# Token Verification (Any Service → Auth-Service)
+curl -X POST https://eatzy-auth.intern.eatzy.com/api/verify \
+  -H "Content-Type: application/json" \
+  -d '{"token":"JWT_TOKEN_HERE"}'
+```
+
+#### **Service Usage (Any Service with JWT Token):**
+```bash
+# ✅ Eatzy API - User Profile
+curl -H "Authorization: Bearer JWT_TOKEN" \
+  http://api.eatsy.local/account/profile
+
+# ✅ Kudoz App - User Data
+curl -H "Authorization: Bearer JWT_TOKEN" \
+  http://kudoz-app/api/user
+
+# ✅ Consumer Portal - Orders
+curl -H "Authorization: Bearer JWT_TOKEN" \
+  http://consumer-portal/api/orders
+
+# ✅ Any Future Service
+curl -H "Authorization: Bearer JWT_TOKEN" \
+  http://new-service/api/endpoint
 ```
 
 ## 🔐 Security Features
@@ -181,18 +381,78 @@ const verifyToken = async (req, res, next) => {
 - **Rate Limiting**: Built-in request rate limiting
 - **Helmet Security**: Security headers and protection
 - **Input Validation**: Request validation and sanitization
+- **Dual Authentication**: Legacy API + Social providers
 
 ## 🛠️ Configuration
 
 ### Environment Variables
+
+#### Basic Configuration
 ```env
 PORT=3001
+NODE_ENV=development
 BETTER_AUTH_SECRET=your-jwt-secret-key  # Better Auth JWT secret
 BETTER_AUTH_URL=http://localhost:3001  # https://eatzy-auth.intern.eatzy.com in staging
 API_SERVICE_URL=http://api.eatsy.local
 API_SERVICE_TOKEN=your-api-service-shared-secret  # Shared secret for API access
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/auth_service
 ```
+
+#### Database Configuration
+**Note**: We use individual database parameters instead of `DATABASE_URL` to avoid SSL connection issues.
+
+```env
+# Database Connection
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=postgres
+DB_NAME=auth_service
+
+# SSL Configuration (Production)
+DB_SSL=false                        # Enable SSL connection
+DB_CA_CERT=                         # CA certificate content (not file path)
+DB_SSL_REJECT_UNAUTHORIZED=true     # Reject unauthorized SSL connections
+```
+
+#### SSL Configuration Examples
+
+**Development (No SSL):**
+```env
+DB_SSL=false
+DB_CA_CERT=
+DB_SSL_REJECT_UNAUTHORIZED=true
+```
+
+**Production with SSL + CA Certificate:**
+```env
+DB_SSL=true
+DB_CA_CERT=-----BEGIN CERTIFICATE-----
+MIIDQTCCAimgAwIBAgITBmyfz5m/jAo54vB4ikPmljZbyjANBgkqhkiG9w0BAQsF
+ADA5MQswCQYDVQQGEwJVUzEPMA0GA1UEChMGQW1hem9uMRkwFwYDVQQDExBBbWF6
+...
+-----END CERTIFICATE-----
+DB_SSL_REJECT_UNAUTHORIZED=true
+```
+
+**Production with SSL (No CA Certificate):**
+```env
+DB_SSL=true
+DB_CA_CERT=
+DB_SSL_REJECT_UNAUTHORIZED=false
+```
+
+#### Social Authentication Configuration
+```env
+# Google OAuth (optional)
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+
+# Facebook OAuth (optional)
+FACEBOOK_CLIENT_ID=your-facebook-app-id
+FACEBOOK_CLIENT_SECRET=your-facebook-app-secret
+```
+
+**Note**: Leave social auth credentials empty to disable social login.
 
 ### 🔐 Inter-Service Security
 
@@ -213,13 +473,34 @@ User → Auth-service → API (with shared secret) → User verification
 JWT → Other Service → Auth-service (no secret) → User data
 ```
 
-### 🗄️ Database Migrations
+### 🗄️ Database Setup
+
+#### SSL Configuration
+The auth-service follows the same database connection pattern as `kudoz-backend`:
+
+- **No DATABASE_URL**: Uses individual DB parameters to avoid SSL issues
+- **CA Certificate Support**: Provide certificate content in `DB_CA_CERT` environment variable
+- **Flexible SSL**: Works with or without CA certificates in production
+
+#### Database Migrations
+```bash
+# Initialize database with Better Auth tables (one-time setup)
+bun run db:migrate
+
+# Development with local PostgreSQL
+bun run dev
+```
 
 **Better Auth Auto-Migration:**
-- Better Auth automatically creates required tables
-- No manual migration files needed
-- Tables created on first startup
-- Run `bun run db:migrate` to initialize
+- ✅ Better Auth automatically creates required tables (`user`, `session`, `account`, `verification`)
+- ✅ Migration files generated automatically by Drizzle
+- ✅ Tables created on first startup with proper SSL configuration
+- ✅ No manual schema management needed - Better Auth handles everything
+
+**Migration Files:**
+- `drizzle/0000_*.sql` - Auto-generated by Better Auth + Drizzle
+- Contains only essential auth tables (no legacy compatibility tables)
+- SSL configuration automatically applied during migration
 
 ### Test Credentials
 For development/testing:
@@ -249,14 +530,42 @@ node test-integration.js
 - Update mobile apps to use JWT authentication
 - Complete migration from old authentication system
 
+## 🏗️ Architecture Notes
+
+### Database Connection Pattern
+The auth-service follows the exact same database connection pattern as `kudoz-backend`:
+
+```typescript
+// Same SSL configuration logic as kudoz-backend
+const pool = new Pool({
+  host: env.DB_HOST,
+  port: env.DB_PORT,
+  user: env.DB_USER,
+  password: env.DB_PASSWORD,
+  database: env.DB_NAME,
+  ssl: env.DB_CA_CERT !== '' 
+    ? {
+        rejectUnauthorized: env.DB_SSL_REJECT_UNAUTHORIZED,
+        ca: env.DB_CA_CERT,  // Certificate content, not file path
+      }
+    : env.DB_SSL ? { rejectUnauthorized: env.DB_SSL_REJECT_UNAUTHORIZED } : undefined,
+});
+```
+
+### Why Individual DB Parameters?
+- **Avoids SSL Issues**: `DATABASE_URL` can cause SSL connection problems
+- **Consistent Pattern**: Matches `kudoz-backend` configuration
+- **Flexible SSL**: Easy to configure SSL with or without CA certificates
+- **Environment Specific**: Different SSL settings per environment
+
 ## 🔄 Next Steps
 
-1. **Connect to Real Database**: Replace mock user verification with actual database queries
-2. **API Integration**: Connect to existing API for user verification
-3. **Better Auth Upgrade**: Migrate to Better Auth for advanced features
-4. **PostgreSQL**: Switch from SQLite to PostgreSQL for production
-5. **Email Verification**: Add email verification flow
-6. **Password Reset**: Implement password reset functionality
+1. **✅ SSL Configuration**: Implemented with CA certificate support
+2. **✅ API Integration**: Connected to existing API for user verification  
+3. **✅ Better Auth**: Fully implemented with PostgreSQL
+4. **🔄 Email Verification**: Add email verification flow
+5. **🔄 Password Reset**: Implement password reset functionality
+6. **🔄 Production Deployment**: Deploy with proper SSL certificates
 
 ## Development Commands
 
@@ -270,9 +579,27 @@ bun run build
 # Start production server
 bun run start
 
+# Database migration
+bun run db:migrate
+
 # Lint code
 bun run lint
 
 # Run tests
 bun run test
+
+# Integration tests
+node test-integration.js
+node test-kudoz-integration.js
 ```
+
+## ✅ Implementation Status
+
+### Completed Features
+- **✅ SSL Configuration**: Full SSL support with CA certificates (matches kudoz-backend pattern)
+- **✅ Database Connection**: Individual DB parameters (no DATABASE_URL to avoid SSL issues)
+- **✅ Better Auth Integration**: Complete JWT authentication with PostgreSQL
+- **✅ API Integration**: Connected to existing eatzy-api for user verification
+- **✅ Security**: Two-level security model with shared secrets
+- **✅ Migration Support**: SSL-aware database migrations
+- **✅ Environment Configuration**: Flexible SSL settings per environment

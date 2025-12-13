@@ -1,6 +1,6 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
-import { Client } from 'pg';
+import { Pool } from 'pg';
 import { env } from '../config/env';
 import { logger } from '../middleware/logger';
 
@@ -8,20 +8,29 @@ async function runMigrations() {
   try {
     logger.info('Running Drizzle database migrations...');
 
-    const client = new Client({
+    // Create pool with SSL support (same pattern as auth.ts and kudoz-backend)
+    const pool = new Pool({
       host: env.DB_HOST,
       port: env.DB_PORT,
       user: env.DB_USER,
       password: env.DB_PASSWORD,
       database: env.DB_NAME,
+      ssl:
+        env.DB_CA_CERT !== ''
+          ? {
+              rejectUnauthorized: env.DB_SSL_REJECT_UNAUTHORIZED,
+              ca: env.DB_CA_CERT,
+            }
+          : env.DB_SSL
+            ? { rejectUnauthorized: env.DB_SSL_REJECT_UNAUTHORIZED }
+            : undefined,
     });
 
-    await client.connect();
-    const db = drizzle(client);
+    const db = drizzle(pool);
 
     await migrate(db, { migrationsFolder: './drizzle' });
 
-    await client.end();
+    await pool.end();
 
     logger.info('Drizzle migration completed successfully');
   } catch (error) {
