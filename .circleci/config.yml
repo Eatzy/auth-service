@@ -9,7 +9,7 @@ executors:
     working_directory: /tmp/my_codebase
     shell: /bin/bash -e
     docker:
-      - image: cimg/node:latest  # Using Bun image
+      - image: cimg/node:24.12  # Using Bun image
     resource_class: large
   deployer:
     working_directory: /tmp/my_codebase
