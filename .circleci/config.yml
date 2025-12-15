@@ -9,7 +9,7 @@ executors:
     working_directory: /tmp/my_codebase
     shell: /bin/bash -e
     docker:
-      - image: cimg/bun:latest  # Using Bun image
+      - image: cimg/node:latest  # Using Bun image
     resource_class: large
   deployer:
     working_directory: /tmp/my_codebase
@@ -22,6 +22,7 @@ jobs:
     executor: node-runner
     steps:
       - checkout
+      - run: curl -fsSL bun.sh | bash
       - run: bun install
       - run: bun build
       - slack/notify:
