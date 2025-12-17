@@ -9,7 +9,7 @@ executors:
     working_directory: /tmp/my_codebase
     shell: /bin/bash -e
     docker:
-      - image: cimg/bun:latest  # Using Bun image
+      - image: cimg/node:24.12  # Using Bun image
     resource_class: large
   deployer:
     working_directory: /tmp/my_codebase
@@ -22,8 +22,44 @@ jobs:
     executor: node-runner
     steps:
       - checkout
-      - run: bun install
-      - run: bun build
+      # 1. Restore Bun Binary Cache
+      - restore_cache:
+          name: Restore Bun Binary
+          keys:
+            - bun-bin-{{ arch }}-v1 # Update suffix (v1) to force a fresh install of Bun
+      # 2. Install Bun (if not restored from cache)
+      - run:
+          name: Install Bun
+          command: |
+            if ! command -v bun &> /dev/null; then
+              curl -fsSL https://bun.sh/install | bash
+            fi
+            # Add Bun to the path for this and subsequent steps
+            echo 'export PATH="$HOME/.bun/bin:$PATH"' >> $BASH_ENV
+      # 3. Save Bun Binary Cache (so we don't curl it every time)
+      - save_cache:
+          name: Save Bun Binary
+          key: bun-bin-{{ arch }}-v1
+          paths:
+            - ~/.bun/bin
+      # 4. Restore Dependency Cache
+      - restore_cache:
+          name: Restore Bun Package Cache
+          keys:
+            - bun-packages-{{ arch }}-{{ checksum "bun.lock" }}
+            - bun-packages-{{ arch }}- # Fallback to most recent cache
+      # 5. Install Dependencies
+      - run:
+          name: Install Dependencies
+          command: bun install --frozen-lockfile
+      # 6. Save Dependency Cache
+      - save_cache:
+          name: Save Bun Package Cache
+          key: bun-packages-{{ arch }}-{{ checksum "bun.lock" }}
+          paths:
+            - ~/.bun/install/cache # Bun's global cache
+            - node_modules
+      - run: bun run build    
       - slack/notify:
           event: fail
           channel: ${SLACK_CHANNEL}
@@ -33,8 +69,44 @@ jobs:
     executor: node-runner
     steps:
       - checkout
-      - run: bun install
-      - run: bun test
+            # 1. Restore Bun Binary Cache
+      - restore_cache:
+          name: Restore Bun Binary
+          keys:
+            - bun-bin-{{ arch }}-v1 # Update suffix (v1) to force a fresh install of Bun
+      # 2. Install Bun (if not restored from cache)
+      - run:
+          name: Install Bun
+          command: |
+            if ! command -v bun &> /dev/null; then
+              curl -fsSL https://bun.sh/install | bash
+            fi
+            # Add Bun to the path for this and subsequent steps
+            echo 'export PATH="$HOME/.bun/bin:$PATH"' >> $BASH_ENV
+      # 3. Save Bun Binary Cache (so we don't curl it every time)
+      - save_cache:
+          name: Save Bun Binary
+          key: bun-bin-{{ arch }}-v1
+          paths:
+            - ~/.bun/bin
+      # 4. Restore Dependency Cache
+      - restore_cache:
+          name: Restore Bun Package Cache
+          keys:
+            - bun-packages-{{ arch }}-{{ checksum "bun.lock" }}
+            - bun-packages-{{ arch }}- # Fallback to most recent cache
+      # 5. Install Dependencies
+      - run:
+          name: Install Dependencies
+          command: bun install --frozen-lockfile
+      # 6. Save Dependency Cache
+      - save_cache:
+          name: Save Bun Package Cache
+          key: bun-packages-{{ arch }}-{{ checksum "bun.lock" }}
+          paths:
+            - ~/.bun/install/cache # Bun's global cache
+            - node_modules
+      - run: bun run test
       - slack/notify:
           event: fail
           channel: ${SLACK_CHANNEL}
