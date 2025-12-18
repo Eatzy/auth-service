@@ -12,10 +12,7 @@ A centralized JWT-based authentication service that provides secure, scalable au
 - **🍽️ Eatzy API** (`api.eatsy.local`) - Main food delivery API
 - **🎯 Kudoz App React** (`kudoz-app-react`) - Loyalty & rewards frontend
 - **🏪 Consumer Portal** (`consumer-portal`) - Customer web application  
-- **📱 Mobile Apps** (iOS/Android) - Native mobile applications
-- **🔧 Admin Dashboard** - Internal management tools
-- **📊 Analytics Services** - Data and reporting services
-- **🔌 Future Services** - Any new service can integrate easily
+- **🔧 Kudoz Backend** (`kudoz-backend`) - Kudoz backend API service
 
 ### 🔑 **Token Compatibility:**
 ```bash
@@ -31,8 +28,8 @@ curl -H "Authorization: Bearer TOKEN" http://kudoz-app/api/user
 # ✅ Works in Consumer Portal
 curl -H "Authorization: Bearer TOKEN" http://consumer-portal/api/orders
 
-# ✅ Works in any future service
-curl -H "Authorization: Bearer TOKEN" http://new-service/api/endpoint
+# ✅ Works in Kudoz Backend
+curl -H "Authorization: Bearer TOKEN" http://kudoz-backend/api/kudoz
 ```
 
 ## 🚀 Quick Start
@@ -89,10 +86,30 @@ curl -X GET http://localhost:3001/api/auth/me \
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/api/auth/sign-in` | User authentication |
+| `POST` | `/api/auth/sign-in/email` | Email/password authentication |
+| `GET` | `/api/auth/google` | Google OAuth login |
+| `GET` | `/api/auth/facebook` | Facebook OAuth login |
+| `GET` | `/api/auth/apple` | Apple OAuth login |
 | `GET` | `/api/auth/me` | Get current user |
 | `POST` | `/api/verify` | Verify JWT token |
 | `GET` | `/api/health` | Health check |
+| `GET` | `/swagger` | **📖 Swagger UI Documentation** |
+| `GET` | `/openapi.json` | OpenAPI specification |
+
+## 📖 API Documentation
+
+**Interactive Swagger UI available at:** `http://localhost:3001/swagger`
+
+The Swagger documentation provides:
+- **Interactive API testing** - Test all endpoints directly from the browser
+- **Complete request/response schemas** - See all required fields and data types
+- **Authentication examples** - Copy-paste ready curl commands
+- **Integration guides** - How to use tokens across all Eatzy services
+- **Error handling** - All possible error responses documented
+
+### Quick Access:
+- **Development**: http://localhost:3001/swagger
+- **Production**: https://eatzy-auth.intern.eatzy.com/swagger
 
 ### Request/Response Examples
 
@@ -142,9 +159,9 @@ curl -X GET http://localhost:3001/api/auth/me \
 ### 🎯 **For Frontend Applications (React, Vue, Angular)**
 
 ```javascript
-// 1. Sign in and get universal token
-const signIn = async (email, password) => {
-  const response = await fetch('https://eatzy-auth.intern.eatzy.com/api/auth/sign-in', {
+// 1. Email/Password Sign in
+const signInWithEmail = async (email, password) => {
+  const response = await fetch('https://eatzy-auth.intern.eatzy.com/api/auth/sign-in/email', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password })
@@ -153,12 +170,23 @@ const signIn = async (email, password) => {
   const data = await response.json()
   
   if (data.success) {
-    // Store token - works for ALL Eatzy services
     localStorage.setItem('eatzy_token', data.token)
     return data.user
   }
   
   throw new Error(data.error)
+}
+
+// 2. Social Login (Google)
+const signInWithGoogle = () => {
+  // Redirect to Google OAuth
+  window.location.href = 'https://eatzy-auth.intern.eatzy.com/api/auth/google'
+}
+
+// 3. Social Login (Facebook)
+const signInWithFacebook = () => {
+  // Redirect to Facebook OAuth
+  window.location.href = 'https://eatzy-auth.intern.eatzy.com/api/auth/facebook'
 }
 
 // 2. Use token with ANY Eatzy service
@@ -184,6 +212,9 @@ await callAnyEatzyService('http://kudoz-app', '/api/user')
 
 // ✅ Call Consumer Portal API
 await callAnyEatzyService('http://consumer-portal', '/api/orders')
+
+// ✅ Call Kudoz Backend API
+await callAnyEatzyService('http://kudoz-backend', '/api/kudoz')
 ```
 
 ### 🔧 **For Backend Services (Node.js, PHP, Python)**
@@ -299,10 +330,10 @@ class EatzyAuthService {
                                 │
                     ┌───────────┼───────────┐
                     ▼           ▼           ▼
-            ┌─────────────┐ ┌─────────┐ ┌─────────────┐
-            │ Kudoz App   │ │ API     │ │ Consumer    │
-            │ React       │ │ Service │ │ Portal      │
-            └─────────────┘ └─────────┘ └─────────────┘
+            ┌─────────────┐ ┌─────────┐ ┌─────────────┐ ┌─────────────┐
+            │ Kudoz App   │ │ API     │ │ Consumer    │ │ Kudoz       │
+            │ React       │ │ Service │ │ Portal      │ │ Backend     │
+            └─────────────┘ └─────────┘ └─────────────┘ └─────────────┘
 ```
 
 ### **🔑 Authentication Methods:**
@@ -316,13 +347,14 @@ User → Auth-Service → Eatzy API (/account/authorize) → Legacy Database →
 - **Verification**: Against existing Eatzy user accounts
 - **Output**: Universal JWT token for all services
 
-#### **2. Social Authentication**
+#### **2. Social Authentication (Google, Facebook & Apple)**
 ```
-User → Auth-Service → Social Provider (Google/Facebook) → Auth-Service DB → JWT Token
+User → Auth-Service → Social Provider (Google/Facebook/Apple) → Auth-Service DB → JWT Token
 ```
-- **Secondary Method**: For new user acquisition
-- **Providers**: Google, Facebook (configurable)
-- **Storage**: Auth-service database (separate from main DB)
+- **Supported Providers**: Google OAuth, Facebook OAuth, Apple OAuth
+- **Endpoints**: `GET /api/auth/google`, `GET /api/auth/facebook`, `GET /api/auth/apple`
+- **Flow**: OAuth redirect → consent → callback → JWT token
+- **Integration**: Links with existing Eatzy accounts if email matches
 - **Output**: Same universal JWT token format
 
 #### **3. Legacy OAuth Support**
@@ -342,10 +374,10 @@ curl -X POST https://eatzy-auth.intern.eatzy.com/api/auth/sign-in/email \
   -H "Content-Type: application/json" \
   -d '{"email":"user@eatzy.com","password":"password123"}'
 
-# Social Login (Google)
+# Social Login (Google) - Redirect in browser
 GET https://eatzy-auth.intern.eatzy.com/api/auth/google
 
-# Social Login (Facebook)  
+# Social Login (Facebook) - Redirect in browser
 GET https://eatzy-auth.intern.eatzy.com/api/auth/facebook
 
 # Token Verification (Any Service → Auth-Service)
@@ -368,9 +400,9 @@ curl -H "Authorization: Bearer JWT_TOKEN" \
 curl -H "Authorization: Bearer JWT_TOKEN" \
   http://consumer-portal/api/orders
 
-# ✅ Any Future Service
+# ✅ Kudoz Backend - Kudoz API
 curl -H "Authorization: Bearer JWT_TOKEN" \
-  http://new-service/api/endpoint
+  http://kudoz-backend/api/kudoz
 ```
 
 ## 🔐 Security Features
@@ -592,6 +624,33 @@ bun run test
 node test-integration.js
 node test-kudoz-integration.js
 ```
+
+## 🚀 Quick Start Guide
+
+1. **Install dependencies:**
+   ```bash
+   bun install
+   ```
+
+2. **Setup environment:**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your database configuration
+   ```
+
+3. **Start development server:**
+   ```bash
+   bun run dev
+   ```
+
+4. **Access Swagger documentation:**
+   ```
+   http://localhost:3001/swagger
+   ```
+
+5. **Test the API:**
+   - Use Swagger UI for interactive testing
+   - Or use curl commands from [docs/api-examples.md](docs/api-examples.md)
 
 ## ✅ Implementation Status
 

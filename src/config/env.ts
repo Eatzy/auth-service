@@ -9,7 +9,6 @@ export const env = cleanEnv(process.env, {
   BETTER_AUTH_SECRET: str(),
   BETTER_AUTH_URL: url({ default: 'http://localhost:3001' }), // Will be eatzy-auth.intern.eatzy.com in staging
   API_SERVICE_URL: url({ default: 'http://api.eatsy.local' }), // Eatzy API base URL
-  API_SERVICE_TOKEN: str({ default: '' }),
 
   // Database credentials (same as kudoz-backend pattern)
   DB_HOST: str({ default: 'localhost' }),
@@ -28,6 +27,8 @@ export const env = cleanEnv(process.env, {
   GOOGLE_CLIENT_SECRET: str({ default: '' }),
   FACEBOOK_CLIENT_ID: str({ default: '' }),
   FACEBOOK_CLIENT_SECRET: str({ default: '' }),
+  APPLE_CLIENT_ID: str({ default: '' }),
+  APPLE_CLIENT_SECRET: str({ default: '' }),
 
   // API Integration
   SERVICES_SECRET_KEY: str({ default: 'local-services-secret-eatzy-2024' }),

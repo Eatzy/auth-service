@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { auth } from './config/auth';
+import { docsApp } from './routes/docs';
 
 const app = new Hono();
 
@@ -197,6 +198,9 @@ app.post('/api/verify', async (c) => {
   }
 });
 
+// Mount documentation routes
+app.route('/', docsApp);
+
 // Root endpoint
 app.get('/', (c) => {
   return c.json({
@@ -206,6 +210,7 @@ app.get('/', (c) => {
       health: '/api/health',
       auth: '/api/auth/*',
       verify: '/api/verify',
+      swagger: '/swagger',
     },
   });
 });
