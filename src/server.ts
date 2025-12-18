@@ -2,19 +2,48 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { auth } from './config/auth';
+import { env } from './config/env';
 import { docsApp } from './routes/docs';
 
 const app = new Hono();
 
-// CORS middleware
+// CORS middleware - Allow all domains from env vars + eatsy.net + eatzy.com
 app.use(
   '*',
   cors({
-    origin: [
-      'http://localhost:3000',
-      'http://localhost:5173',
-      'http://localhost:3001',
-    ],
+    origin: (origin) => {
+      // Always allow localhost for development
+      if (!origin || origin.includes('localhost')) {
+        return origin;
+      }
+
+      // Allow domains from environment variables
+      const allowedEnvDomains = [env.BETTER_AUTH_URL, env.API_SERVICE_URL];
+
+      // Check if origin matches any env domain
+      for (const envDomain of allowedEnvDomains) {
+        try {
+          const envUrl = new URL(envDomain);
+          if (origin.includes(envUrl.hostname)) {
+            return origin;
+          }
+        } catch (_e) {
+          // Skip invalid URLs
+        }
+      }
+
+      // Allow all eatsy.net and eatzy.com domains and subdomains
+      if (
+        origin.endsWith('.eatsy.net') ||
+        origin.endsWith('.eatzy.com') ||
+        origin === 'https://eatsy.net' ||
+        origin === 'https://eatzy.com'
+      ) {
+        return origin;
+      }
+
+      return null; // Reject origin
+    },
     credentials: true,
   }),
 );
@@ -198,9 +227,6 @@ app.post('/api/verify', async (c) => {
   }
 });
 
-// Mount documentation routes
-app.route('/', docsApp);
-
 // Root endpoint
 app.get('/', (c) => {
   return c.json({
@@ -215,13 +241,16 @@ app.get('/', (c) => {
   });
 });
 
+// Mount documentation routes (swagger, openapi.json) - will not override root
+app.route('/', docsApp);
+
 // 404 handler
-app.notFound((c) => {
+app.notFound((c: any) => {
   return c.json({ error: 'Route not found' }, 404);
 });
 
 // Error handler
-app.onError((err, c) => {
+app.onError((err: any, c: any) => {
   console.error(err);
   return c.json({ error: 'Something went wrong!' }, 500);
 });
