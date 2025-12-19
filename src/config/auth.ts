@@ -1,5 +1,6 @@
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
+import { APIError } from 'better-auth/api';
 import { hashPassword } from 'better-auth/crypto';
 import { and, eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
@@ -49,6 +50,20 @@ export const auth = betterAuth({
     requireEmailVerification: false,
   },
 
+  // Session configuration
+  session: {
+    expiresIn: 60 * 60 * 24 * 7, // 7 days
+    updateAge: 60 * 60 * 24, // 1 day
+  },
+
+  // Advanced configuration for error handling
+  advanced: {
+    generateId: () => crypto.randomUUID(),
+    crossSubDomainCookies: {
+      enabled: false,
+    },
+  },
+
   // Social authentication (handled by auth-service directly)
   socialProviders: {
     google: {
@@ -66,12 +81,6 @@ export const auth = betterAuth({
       clientSecret: env.APPLE_CLIENT_SECRET || '',
       enabled: !!(env.APPLE_CLIENT_ID && env.APPLE_CLIENT_SECRET),
     },
-  },
-
-  // Session configuration
-  session: {
-    expiresIn: 60 * 60 * 24 * 7, // 7 days
-    updateAge: 60 * 60 * 24, // 1 day
   },
 
   // Custom hooks for Eatzy integration
@@ -115,8 +124,18 @@ export const auth = betterAuth({
             console.log(
               `❌ Failed to create user in Eatzy DB: ${createResult.error}`,
             );
-            throw new Error(
-              `Registration failed: ${createResult.error || 'Unable to create account'}`,
+            // Return error response directly
+            return new Response(
+              JSON.stringify({
+                error: createResult.error || 'Unable to create account',
+                message: createResult.error || 'Unable to create account',
+              }),
+              {
+                status: 400,
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+              },
             );
           }
 
@@ -156,7 +175,47 @@ export const auth = betterAuth({
             console.log('verifyResult:', verifyResult);
 
             if (!verifyResult.valid) {
-              throw new Error('Invalid credentials');
+              // Pass through the exact error message from API
+              if (verifyResult.error) {
+                const { message } = verifyResult.error;
+
+                // Try to parse JSON message if it's a JSON string
+                let errorMessage = message;
+                try {
+                  const parsed = JSON.parse(message);
+                  if (parsed.message) {
+                    errorMessage = parsed.message;
+                  }
+                } catch {
+                  // Keep original message if not JSON
+                }
+
+                return new Response(
+                  JSON.stringify({
+                    error: errorMessage,
+                    message: errorMessage,
+                  }),
+                  {
+                    status: 401,
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                  },
+                );
+              } else {
+                return new Response(
+                  JSON.stringify({
+                    error: 'Invalid credentials',
+                    message: 'Invalid credentials',
+                  }),
+                  {
+                    status: 401,
+                    headers: {
+                      'Content-Type': 'application/json',
+                    },
+                  },
+                );
+              }
             }
 
             // Check if user exists in Better Auth database
@@ -264,7 +323,49 @@ export const auth = betterAuth({
             };
           } else {
             console.log(`❌ User not found in Eatzy DB: ${email}`);
-            throw new Error('User not found. Please register first.');
+
+            // Pass through the exact error message from API
+            if (existsResult.error) {
+              const { message } = existsResult.error;
+
+              // Try to parse JSON message if it's a JSON string
+              let errorMessage = message;
+              try {
+                const parsed = JSON.parse(message);
+                if (parsed.message) {
+                  errorMessage = parsed.message;
+                }
+              } catch {
+                // Keep original message if not JSON
+              }
+
+              // Return error response directly instead of throwing
+              return new Response(
+                JSON.stringify({
+                  error: errorMessage,
+                  message: errorMessage,
+                }),
+                {
+                  status: 400,
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                },
+              );
+            } else {
+              return new Response(
+                JSON.stringify({
+                  error: 'User not found. Please register first.',
+                  message: 'User not found. Please register first.',
+                }),
+                {
+                  status: 400,
+                  headers: {
+                    'Content-Type': 'application/json',
+                  },
+                },
+              );
+            }
           }
           return;
         }
