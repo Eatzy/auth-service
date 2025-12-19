@@ -6,26 +6,32 @@ const debugApp = new Hono();
 
 /**
  * Helper function to detect if we're in development environment
- * Based on NODE_ENV, API_SERVICE_URL domain, or BETTER_AUTH_URL
+ *
+ * Logic: Consider it PRODUCTION only if:
+ * - NODE_ENV !== 'development'
+ * - AND uses *.eatzy.com domain
+ * - AND NOT eatzy-auth.intern.eatzy.com (staging)
+ *
+ * Everything else is considered DEVELOPMENT (debug active)
  */
 function isDevelopmentEnvironment(): boolean {
-  // If NODE_ENV is explicitly development
+  // If NODE_ENV is explicitly development, always return true
   if (env.NODE_ENV === 'development') {
     return true;
   }
 
-  // Check BETTER_AUTH_URL for staging detection
+  // Check BETTER_AUTH_URL for production detection
   if (env.BETTER_AUTH_URL) {
     try {
       const authUrl = new URL(env.BETTER_AUTH_URL);
       const authHostname = authUrl.hostname.toLowerCase();
 
-      // If using eatzy.com domain but NOT production, consider it development/staging
+      // If using *.eatzy.com domain but NOT staging, consider it production
       if (
         authHostname.endsWith('.eatzy.com') &&
-        authHostname !== 'eatzy-auth.eatzy.com'
+        authHostname !== 'eatzy-auth.intern.eatzy.com'
       ) {
-        return true; // This includes eatzy-auth.intern.eatzy.com (staging)
+        return false; // Production environment - debug inactive
       }
     } catch (_error) {
       // If URL parsing fails, assume development
@@ -33,23 +39,8 @@ function isDevelopmentEnvironment(): boolean {
     }
   }
 
-  // If API_SERVICE_URL doesn't use *.eatzy.com domain, consider it development
-  if (env.API_SERVICE_URL) {
-    try {
-      const url = new URL(env.API_SERVICE_URL);
-      const hostname = url.hostname.toLowerCase();
-
-      // If not using eatzy.com domain, consider it development
-      if (!hostname.endsWith('.eatzy.com') && hostname !== 'eatzy.com') {
-        return true;
-      }
-    } catch (_error) {
-      // If URL parsing fails, assume development
-      return true;
-    }
-  }
-
-  return false;
+  // Default to development (debug active) for safety
+  return true;
 }
 
 /**
@@ -79,10 +70,11 @@ debugApp.get('/config', (c) => {
         ? !env.API_SERVICE_URL.includes('.eatzy.com')
         : true,
       auth_url_is_staging: env.BETTER_AUTH_URL
-        ? env.BETTER_AUTH_URL.includes('intern.eatzy.com')
+        ? env.BETTER_AUTH_URL.includes('eatzy-auth.intern.eatzy.com')
         : false,
       auth_url_is_production: env.BETTER_AUTH_URL
-        ? env.BETTER_AUTH_URL.includes('eatzy-auth.eatzy.com')
+        ? env.BETTER_AUTH_URL.includes('eatzy-auth.eatzy.com') &&
+          !env.BETTER_AUTH_URL.includes('intern')
         : false,
       final_is_development: isDevelopmentEnvironment(),
     },
