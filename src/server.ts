@@ -56,63 +56,77 @@ app.use('*', logger());
 app.on(['POST', 'GET'], '/api/auth/*', async (c) => {
   console.log('Better Auth request received:', c.req.method, c.req.path);
 
-  // Handle sign-in and sign-up to extract session token
-  if (
-    c.req.path.includes('/sign-in/email') ||
-    c.req.path.includes('/sign-up/email')
-  ) {
+  try {
     const response = await auth.handler(c.req.raw);
 
-    // If successful, extract the session token from cookies and add to response body
-    if (response.status === 200) {
-      const setCookieHeader = response.headers.get('set-cookie');
-      let sessionToken = null;
+    // Handle sign-in and sign-up to extract session token
+    if (
+      c.req.path.includes('/sign-in/email') ||
+      c.req.path.includes('/sign-up/email')
+    ) {
+      // If successful, extract the session token from cookies and add to response body
+      if (response.status === 200) {
+        const setCookieHeader = response.headers.get('set-cookie');
+        let sessionToken = null;
 
-      if (setCookieHeader) {
-        // Extract session token from set-cookie header
-        const cookies = setCookieHeader.split(',');
-        for (const cookie of cookies) {
-          if (cookie.includes('better-auth.session_token=')) {
-            const tokenMatch = cookie.match(
-              /better-auth\.session_token=([^;]+)/,
-            );
-            if (tokenMatch) {
-              sessionToken = tokenMatch[1];
-              console.log(
-                '🍪 Extracted session token from cookie:',
-                sessionToken.substring(0, 10) + '...',
+        if (setCookieHeader) {
+          // Extract session token from set-cookie header
+          const cookies = setCookieHeader.split(',');
+          for (const cookie of cookies) {
+            if (cookie.includes('better-auth.session_token=')) {
+              const tokenMatch = cookie.match(
+                /better-auth\.session_token=([^;]+)/,
               );
-              break;
+              if (tokenMatch) {
+                sessionToken = tokenMatch[1];
+                console.log(
+                  '🍪 Extracted session token from cookie:',
+                  sessionToken.substring(0, 10) + '...',
+                );
+                break;
+              }
             }
           }
         }
-      }
 
-      if (sessionToken) {
-        // Parse the original response and add the token
-        const originalData = await response.json();
+        if (sessionToken) {
+          // Parse the original response and add the token
+          const originalData = await response.json();
 
-        // Create new response with token included
-        const responseData =
-          typeof originalData === 'object' && originalData !== null
-            ? { ...originalData, token: sessionToken }
-            : { token: sessionToken, data: originalData };
+          // Create new response with token included
+          const responseData =
+            typeof originalData === 'object' && originalData !== null
+              ? { ...originalData, token: sessionToken }
+              : { token: sessionToken, data: originalData };
 
-        const newResponse = new Response(JSON.stringify(responseData), {
-          status: response.status,
-          headers: response.headers,
-        });
+          const newResponse = new Response(JSON.stringify(responseData), {
+            status: response.status,
+            headers: response.headers,
+          });
 
-        console.log('✅ Added session token to response for:', c.req.path);
-        return newResponse;
+          console.log('✅ Added session token to response for:', c.req.path);
+          return newResponse;
+        }
       }
     }
 
+    // For all other cases, return the response as-is
     return response;
-  }
+  } catch (error) {
+    console.error('Better Auth Handler Error:', error);
 
-  // For all other auth endpoints, use default handler
-  return auth.handler(c.req.raw);
+    // Return proper JSON error response
+    const errorMessage =
+      error instanceof Error ? error.message : 'Authentication failed';
+
+    return c.json(
+      {
+        error: errorMessage,
+        message: errorMessage,
+      },
+      400,
+    );
+  }
 });
 
 // Health endpoint
@@ -256,8 +270,18 @@ app.notFound((c: any) => {
 
 // Error handler
 app.onError((err: any, c: any) => {
-  console.error(err);
-  return c.json({ error: 'Something went wrong!' }, 500);
+  console.error('Auth Service Error:', err);
+
+  // Return the actual error message instead of generic message
+  const errorMessage = err.message || 'Something went wrong!';
+
+  return c.json(
+    {
+      error: errorMessage,
+      message: errorMessage, // Better Auth expects 'message' field
+    },
+    500,
+  );
 });
 
 export { app };

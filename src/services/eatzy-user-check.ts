@@ -11,6 +11,11 @@ interface EatzyUserCheckResult {
     confirmed: boolean;
     active: boolean;
   };
+  error?: {
+    status: number;
+    message: string;
+    endpoint: string;
+  };
 }
 
 interface EatzyApiCheckResponse {
@@ -78,9 +83,20 @@ export class EatzyUserCheckService {
       });
 
       if (!response.ok) {
-        console.log('response', response);
-        console.log(`❌ User check API failed: ${response.status}`);
-        return { exists: false };
+        const errorText = await response.text().catch(() => 'Unknown error');
+        console.log(
+          `❌ User check API failed: ${response.status} - ${errorText}`,
+        );
+
+        // Return detailed error information
+        return {
+          exists: false,
+          error: {
+            status: response.status,
+            message: errorText,
+            endpoint: '/account/check-user',
+          },
+        };
       }
 
       const data = (await response.json()) as EatzyApiCheckResponse;
@@ -105,8 +121,18 @@ export class EatzyUserCheckService {
       return { exists: false };
     } catch (error) {
       console.error('❌ Eatzy user check error:', error);
-      // On error, assume user doesn't exist to allow registration
-      return { exists: false };
+      // Return detailed error information instead of assuming user doesn't exist
+      return {
+        exists: false,
+        error: {
+          status: 0,
+          message:
+            error instanceof Error
+              ? error.message
+              : 'Network or connection error',
+          endpoint: '/account/check-user',
+        },
+      };
     }
   }
 
@@ -120,6 +146,11 @@ export class EatzyUserCheckService {
   ): Promise<{
     valid: boolean;
     userData?: any;
+    error?: {
+      status: number;
+      message: string;
+      endpoint: string;
+    };
   }> {
     try {
       console.log(`🔐 Verifying existing Eatzy user: ${email}`);
@@ -139,11 +170,18 @@ export class EatzyUserCheckService {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
+        const errorText = await response.text().catch(() => 'Unknown error');
         console.log(
           `❌ Eatzy user verification failed: ${response.status} - ${errorText}`,
         );
-        return { valid: false };
+        return {
+          valid: false,
+          error: {
+            status: response.status,
+            message: errorText,
+            endpoint: '/account/authorize',
+          },
+        };
       }
 
       const data = (await response.json()) as EatzyApiAuthResponse;
@@ -167,7 +205,17 @@ export class EatzyUserCheckService {
       return { valid: false };
     } catch (error) {
       console.error('❌ Eatzy user verification error:', error);
-      return { valid: false };
+      return {
+        valid: false,
+        error: {
+          status: 0,
+          message:
+            error instanceof Error
+              ? error.message
+              : 'Network or connection error',
+          endpoint: '/account/authorize',
+        },
+      };
     }
   }
 
@@ -205,13 +253,25 @@ export class EatzyUserCheckService {
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
+        const errorText = await response.text().catch(() => 'Unknown error');
         console.log(
           `❌ Eatzy user creation failed: ${response.status} - ${errorText}`,
         );
+
+        // Try to parse JSON message if it's a JSON string
+        let errorMessage = errorText;
+        try {
+          const parsed = JSON.parse(errorText);
+          if (parsed.message) {
+            errorMessage = parsed.message;
+          }
+        } catch {
+          // Keep original message if not JSON
+        }
+
         return {
           created: false,
-          error: `Failed to create user: ${response.status}`,
+          error: errorMessage,
         };
       }
 
@@ -256,7 +316,10 @@ export class EatzyUserCheckService {
       console.error('❌ Eatzy user creation error:', error);
       return {
         created: false,
-        error: `Network error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Network or connection error',
       };
     }
   }
