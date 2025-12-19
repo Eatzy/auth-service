@@ -6,12 +6,31 @@ const debugApp = new Hono();
 
 /**
  * Helper function to detect if we're in development environment
- * Based on NODE_ENV or API_SERVICE_URL domain
+ * Based on NODE_ENV, API_SERVICE_URL domain, or BETTER_AUTH_URL
  */
 function isDevelopmentEnvironment(): boolean {
   // If NODE_ENV is explicitly development
   if (env.NODE_ENV === 'development') {
     return true;
+  }
+
+  // Check BETTER_AUTH_URL for staging detection
+  if (env.BETTER_AUTH_URL) {
+    try {
+      const authUrl = new URL(env.BETTER_AUTH_URL);
+      const authHostname = authUrl.hostname.toLowerCase();
+
+      // If using eatzy.com domain but NOT production, consider it development/staging
+      if (
+        authHostname.endsWith('.eatzy.com') &&
+        authHostname !== 'eatzy-auth.eatzy.com'
+      ) {
+        return true; // This includes eatzy-auth.intern.eatzy.com (staging)
+      }
+    } catch (_error) {
+      // If URL parsing fails, assume development
+      return true;
+    }
   }
 
   // If API_SERVICE_URL doesn't use *.eatzy.com domain, consider it development
@@ -59,6 +78,12 @@ debugApp.get('/config', (c) => {
       api_url_is_local: env.API_SERVICE_URL
         ? !env.API_SERVICE_URL.includes('.eatzy.com')
         : true,
+      auth_url_is_staging: env.BETTER_AUTH_URL
+        ? env.BETTER_AUTH_URL.includes('intern.eatzy.com')
+        : false,
+      auth_url_is_production: env.BETTER_AUTH_URL
+        ? env.BETTER_AUTH_URL.includes('eatzy-auth.eatzy.com')
+        : false,
       final_is_development: isDevelopmentEnvironment(),
     },
     server: {
