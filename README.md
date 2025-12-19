@@ -656,7 +656,7 @@ node test-kudoz-integration.js
 
 ### Completed Features
 - **✅ SSL Configuration**: Full SSL support with CA certificates (matches kudoz-backend pattern)
-- **✅ Database Connection**: Individual DB parameters (no DATABASE_URL to avoid SSL issues in prod)
+- **✅ Database Connection**: Individual DB parameters (no DATABASE_URL to avoid SSL issues)
 - **✅ Better Auth Integration**: Complete JWT authentication with PostgreSQL
 - **✅ API Integration**: Connected to existing eatzy-api for user verification
 - **✅ Security**: Two-level security model with shared secrets
