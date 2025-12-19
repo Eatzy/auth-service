@@ -3,6 +3,7 @@ import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { auth } from './config/auth';
 import { env } from './config/env';
+import { debugApp } from './routes/debug';
 import { docsApp } from './routes/docs';
 
 const app = new Hono();
@@ -237,9 +238,13 @@ app.get('/', (c) => {
       auth: '/api/auth/*',
       verify: '/api/verify',
       swagger: '/swagger',
+      debug: '/debug/* (development only)',
     },
   });
 });
+
+// Mount debug routes (only accessible in development or with debug token)
+app.route('/debug', debugApp);
 
 // Mount documentation routes (swagger, openapi.json) - will not override root
 app.route('/', docsApp);
