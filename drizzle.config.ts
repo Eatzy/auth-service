@@ -14,13 +14,13 @@ export default defineConfig({
     user: process.env.DB_USER!,
     password: process.env.DB_PASSWORD!,
     database: process.env.DB_NAME!,
-    ssl:
-      caCert !== undefined
-        ? {
-            rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED, // recommend `true` for production
-            ca: caCert,
-          }
-        : undefined, // if no cert, use regular connection
+    ssl: false,
+      // caCert !== undefined
+      //   ? {
+      //       rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED, // recommend `true` for production
+      //       ca: caCert,
+      //     }
+      //   : undefined, // if no cert, use regular connection
   },
   migrations: {
     table: '__drizzle_migrations', // `__drizzle_migrations` by default
