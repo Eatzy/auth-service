@@ -17,7 +17,7 @@ export default defineConfig({
     ssl:
       caCert !== undefined
         ? {
-            rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED, // recommended `true` for production
+            rejectUnauthorized: process.env.DB_SSL_REJECT_UNAUTHORIZED, // recommend `true` for production
             ca: caCert,
           }
         : undefined, // if no cert, use regular connection
