@@ -32,4 +32,15 @@ export const env = cleanEnv(process.env, {
 
   // API Integration
   SERVICES_SECRET_KEY: str({ default: 'local-services-secret-eatzy-2024' }),
+
+  // Trusted Origins for CORS (comma-separated)
+  TRUSTED_ORIGINS: str({
+    default:
+      'http://localhost:5173,http://localhost:3000,http://localhost:3001',
+  }),
+
+  // Allowed Domain Patterns for CORS (comma-separated)
+  ALLOWED_DOMAIN_PATTERNS: str({
+    default: '.eatsy.net,.eatzy.com,https://eatsy.net,https://eatzy.com',
+  }),
 });

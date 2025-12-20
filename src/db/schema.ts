@@ -57,7 +57,21 @@ export const verification = pgTable('verification', {
   updatedAt: timestamp('updatedAt').notNull().defaultNow(),
 });
 
+// Configuration table for storing app settings
+export const configuration = pgTable('configuration', {
+  id: text('id').primaryKey(),
+  key: text('key').notNull().unique(),
+  value: text('value').notNull(),
+  description: text('description'),
+  category: text('category').notNull().default('general'),
+  isSecret: boolean('isSecret').notNull().default(false), // For sensitive values
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+});
+
 export type User = typeof user.$inferSelect;
 export type NewUser = typeof user.$inferInsert;
 export type Session = typeof session.$inferSelect;
 export type NewSession = typeof session.$inferInsert;
+export type Configuration = typeof configuration.$inferSelect;
+export type NewConfiguration = typeof configuration.$inferInsert;
