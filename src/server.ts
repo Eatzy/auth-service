@@ -2,19 +2,60 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { logger } from 'hono/logger';
 import { auth } from './config/auth';
+import { EnhancedEnv } from './config/enhanced-env';
 import { env } from './config/env';
+import { configApp } from './routes/config';
 import { debugApp } from './routes/debug';
 import { docsApp } from './routes/docs';
+import { socialAuthApp } from './routes/social-auth';
+
+// Helper function to get trusted origins
+function getTrustedOrigins(): string[] {
+  return EnhancedEnv.getTrustedOriginsSync();
+}
+
+// Helper function to check if origin matches allowed domain patterns
+function isAllowedDomain(origin: string): boolean {
+  const patterns = EnhancedEnv.getAllowedDomainPatternsSync();
+
+  for (const pattern of patterns) {
+    // If pattern starts with dot, it's a subdomain pattern (e.g., .eatsy.net)
+    if (pattern.startsWith('.')) {
+      if (origin.endsWith(pattern)) {
+        return true;
+      }
+    }
+    // Otherwise, exact match (e.g., https://eatsy.net)
+    else if (origin === pattern) {
+      return true;
+    }
+  }
+
+  return false;
+}
 
 const app = new Hono();
 
-// CORS middleware - Allow all domains from env vars + eatsy.net + eatzy.com
+// CORS middleware - Use trusted origins from config + env domains + eatsy.net + eatzy.com
 app.use(
   '*',
   cors({
     origin: (origin) => {
-      // Always allow localhost for development
-      if (!origin || origin.includes('localhost')) {
+      // Get trusted origins from config
+      const trustedOrigins = getTrustedOrigins();
+
+      // Always allow if no origin (same-origin requests)
+      if (!origin) {
+        return origin;
+      }
+
+      // Check if origin is in trusted origins list
+      if (trustedOrigins.includes(origin)) {
+        return origin;
+      }
+
+      // Allow localhost for development (fallback)
+      if (origin.includes('localhost')) {
         return origin;
       }
 
@@ -33,13 +74,8 @@ app.use(
         }
       }
 
-      // Allow all eatsy.net and eatzy.com domains and subdomains
-      if (
-        origin.endsWith('.eatsy.net') ||
-        origin.endsWith('.eatzy.com') ||
-        origin === 'https://eatsy.net' ||
-        origin === 'https://eatzy.com'
-      ) {
+      // Allow all configured domain patterns (eatsy.net, eatzy.com, etc.)
+      if (isAllowedDomain(origin)) {
         return origin;
       }
 
@@ -52,79 +88,35 @@ app.use(
 // Logger middleware
 app.use('*', logger());
 
-// Better Auth handler - mount with Hono syntax with custom response handling
+// Better Auth handler - mount with Hono syntax - SIMPLIFIED VERSION
 app.on(['POST', 'GET'], '/api/auth/*', async (c) => {
   console.log('Better Auth request received:', c.req.method, c.req.path);
 
   try {
+    // Let Better Auth handle ALL requests naturally without custom logic
     const response = await auth.handler(c.req.raw);
 
-    // Handle sign-in and sign-up to extract session token
-    if (
-      c.req.path.includes('/sign-in/email') ||
-      c.req.path.includes('/sign-up/email')
-    ) {
-      // If successful, extract the session token from cookies and add to response body
-      if (response.status === 200) {
-        const setCookieHeader = response.headers.get('set-cookie');
-        let sessionToken = null;
+    console.log(`📋 Better Auth response: ${response.status}`);
 
-        if (setCookieHeader) {
-          // Extract session token from set-cookie header
-          const cookies = setCookieHeader.split(',');
-          for (const cookie of cookies) {
-            if (cookie.includes('better-auth.session_token=')) {
-              const tokenMatch = cookie.match(
-                /better-auth\.session_token=([^;]+)/,
-              );
-              if (tokenMatch) {
-                sessionToken = tokenMatch[1];
-                console.log(
-                  '🍪 Extracted session token from cookie:',
-                  sessionToken.substring(0, 10) + '...',
-                );
-                break;
-              }
-            }
-          }
-        }
-
-        if (sessionToken) {
-          // Parse the original response and add the token
-          const originalData = await response.json();
-
-          // Create new response with token included
-          const responseData =
-            typeof originalData === 'object' && originalData !== null
-              ? { ...originalData, token: sessionToken }
-              : { token: sessionToken, data: originalData };
-
-          const newResponse = new Response(JSON.stringify(responseData), {
-            status: response.status,
-            headers: response.headers,
-          });
-
-          console.log('✅ Added session token to response for:', c.req.path);
-          return newResponse;
-        }
+    // For debugging, log response headers
+    if (response.status === 302) {
+      console.log(`📋 Redirect location: ${response.headers.get('Location')}`);
+      const cookies = response.headers.get('set-cookie');
+      if (cookies) {
+        console.log(`🍪 Set cookies: ${cookies}`);
       }
     }
 
-    // For all other cases, return the response as-is
     return response;
   } catch (error) {
     console.error('Better Auth Handler Error:', error);
-
-    // Return proper JSON error response
-    const errorMessage =
-      error instanceof Error ? error.message : 'Authentication failed';
-
     return c.json(
       {
-        error: errorMessage,
-        message: errorMessage,
+        error: error instanceof Error ? error.message : 'Authentication failed',
+        message:
+          error instanceof Error ? error.message : 'Authentication failed',
       },
-      400,
+      500,
     );
   }
 });
@@ -138,7 +130,202 @@ app.get('/api/health', (c) => {
   });
 });
 
-// Session token verification endpoint for other services
+// OAuth code exchange endpoint
+app.post('/auth/oauth/google', async (c) => {
+  try {
+    console.log('🔄 Processing Google OAuth code exchange...');
+
+    const { code, state } = await c.req.json();
+
+    if (!code) {
+      console.log('❌ No code provided');
+      return c.json({ error: 'Code is required' }, 400);
+    }
+
+    console.log(`🔍 Exchanging code: ${code.substring(0, 20)}...`);
+
+    // Use Better Auth's signIn.social method with the code
+    try {
+      // Create a request that simulates the OAuth callback
+      const callbackUrl = `${env.BETTER_AUTH_URL}/api/auth/callback/google?code=${encodeURIComponent(code)}${state ? `&state=${encodeURIComponent(state)}` : ''}`;
+
+      console.log(`🔄 Processing OAuth callback: ${callbackUrl}`);
+
+      // Create a proper request object for Better Auth
+      const mockRequest = new Request(callbackUrl, {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (compatible; auth-service)',
+          Accept:
+            'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        },
+      });
+
+      // Process with Better Auth
+      const authResponse = await auth.handler(mockRequest);
+
+      console.log(`📋 Better Auth response status: ${authResponse.status}`);
+      console.log(
+        `📋 Better Auth response headers:`,
+        Object.fromEntries(authResponse.headers.entries()),
+      );
+
+      // Try to read the response body for more info
+      const responseClone = authResponse.clone();
+      const responseText = await responseClone.text();
+      console.log(
+        `📋 Better Auth response body: ${responseText.substring(0, 200)}...`,
+      );
+
+      if (authResponse.status === 302) {
+        // Success - extract cookies
+        const cookies = authResponse.headers.get('set-cookie');
+        console.log(`🍪 Set-Cookie header: ${cookies}`);
+
+        // Also try to get all cookie-related headers
+        const allHeaders = Object.fromEntries(authResponse.headers.entries());
+        const cookieHeaders = Object.keys(allHeaders).filter(
+          (key) =>
+            key.toLowerCase().includes('cookie') ||
+            key.toLowerCase().includes('set-cookie'),
+        );
+        console.log(
+          `🍪 All cookie-related headers:`,
+          cookieHeaders.map((key) => `${key}: ${allHeaders[key]}`),
+        );
+
+        if (cookies) {
+          // Extract session token
+          const sessionTokenMatch = cookies.match(
+            /better-auth\.session_token=([^;]+)/,
+          );
+
+          if (sessionTokenMatch) {
+            const sessionToken = sessionTokenMatch[1];
+            console.log(
+              `✅ Session token extracted: ${sessionToken.substring(0, 20)}...`,
+            );
+
+            // Verify the session
+            const sessionData = await auth.api.getSession({
+              headers: new Headers({
+                cookie: `better-auth.session_token=${sessionToken}`,
+              }),
+            });
+
+            if (sessionData && sessionData.user) {
+              console.log(
+                `✅ OAuth successful for user: ${sessionData.user.email}`,
+              );
+
+              // Return success with session data
+              const responseData = {
+                success: true,
+                token: sessionToken,
+                user: {
+                  id: sessionData.user.id,
+                  email: sessionData.user.email,
+                  name: sessionData.user.name,
+                  emailVerified: sessionData.user.emailVerified,
+                },
+                session: {
+                  id: sessionData.session.id,
+                  expiresAt: sessionData.session.expiresAt,
+                },
+              };
+
+              // Create response with session cookie
+              const response = new Response(JSON.stringify(responseData), {
+                status: 200,
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Set-Cookie': cookies, // Forward the session cookie
+                },
+              });
+
+              return response;
+            } else {
+              console.log('❌ Session verification failed');
+              return c.json({ error: 'Session verification failed' }, 500);
+            }
+          } else {
+            console.log('❌ No session token found in cookies');
+            return c.json({ error: 'No session token in response' }, 500);
+          }
+        } else {
+          console.log('❌ No cookies in Better Auth response');
+          return c.json({ error: 'No cookies in auth response' }, 500);
+        }
+      } else {
+        // Error response from Better Auth
+        const errorText = await authResponse.text();
+        console.log(
+          `❌ Better Auth error (${authResponse.status}): ${errorText}`,
+        );
+
+        // Try to parse error message
+        let errorMessage = 'OAuth callback failed';
+        try {
+          const errorData = JSON.parse(errorText);
+          errorMessage = errorData.message || errorData.error || errorMessage;
+        } catch {
+          // Keep default message
+        }
+
+        return c.json({ error: errorMessage }, authResponse.status as any);
+      }
+    } catch (authError) {
+      console.error('❌ Better Auth processing error:', authError);
+      return c.json({ error: 'OAuth processing failed' }, 500 as any);
+    }
+  } catch (error) {
+    console.error('❌ OAuth code exchange error:', error);
+    return c.json({ error: 'OAuth exchange failed' }, 500);
+  }
+});
+
+// Session endpoint for frontend to check authentication status
+app.get('/auth/session', async (c) => {
+  try {
+    console.log('🔍 Checking session for frontend...');
+
+    // Debug: Log all headers
+    const headers = Object.fromEntries(c.req.raw.headers.entries());
+    console.log('📋 Request headers:', headers);
+
+    // Debug: Log cookies specifically
+    const cookieHeader = c.req.header('cookie');
+    console.log('🍪 Cookie header:', cookieHeader);
+
+    // Use Better Auth API to get session
+    const sessionData = await auth.api.getSession({
+      headers: c.req.raw.headers,
+    });
+
+    if (sessionData && sessionData.user) {
+      console.log(`✅ Session found for user: ${sessionData.user.email}`);
+
+      return c.json({
+        user: {
+          id: sessionData.user.id,
+          email: sessionData.user.email,
+          name: sessionData.user.name,
+          emailVerified: sessionData.user.emailVerified,
+        },
+        session: {
+          id: sessionData.session.id,
+          expiresAt: sessionData.session.expiresAt,
+        },
+      });
+    }
+
+    console.log('❌ No valid session found');
+    return c.json({ error: 'No session found' }, 401);
+  } catch (error) {
+    console.error('❌ Session check error:', error);
+    return c.json({ error: 'Session check failed' }, 500);
+  }
+});
 app.post('/api/verify', async (c) => {
   const startTime = Date.now();
 
@@ -251,6 +438,9 @@ app.get('/', (c) => {
       health: '/api/health',
       auth: '/api/auth/*',
       verify: '/api/verify',
+      'oauth-exchange': '/auth/oauth/google (POST - exchange OAuth code)',
+      'session-check': '/auth/session (GET - check current session)',
+      'social-auth': '/social-auth/* (Google OAuth URL generation)',
       swagger: '/swagger',
       debug: '/debug/* (development only)',
     },
@@ -259,6 +449,12 @@ app.get('/', (c) => {
 
 // Mount debug routes (only accessible in development or with debug token)
 app.route('/debug', debugApp);
+
+// Mount configuration management routes
+app.route('/config', configApp);
+
+// Mount social auth routes (Google OAuth URL generation)
+app.route('/social-auth', socialAuthApp);
 
 // Mount documentation routes (swagger, openapi.json) - will not override root
 app.route('/', docsApp);

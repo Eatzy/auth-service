@@ -387,4 +387,138 @@ debugApp.get('/env-check', (c) => {
   });
 });
 
+/**
+ * Test Google OAuth Configuration
+ *
+ * Tests if Google OAuth is properly configured and accessible
+ */
+debugApp.get('/test-google-oauth', async (c) => {
+  // Only allow in development or with debug header
+  const isDebugAllowed =
+    isDevelopmentEnvironment() ||
+    c.req.header('X-Debug-Token') === env.SERVICES_SECRET_KEY;
+
+  if (!isDebugAllowed) {
+    return c.json({ error: 'Debug access denied' }, 403);
+  }
+
+  try {
+    // Test Google OAuth configuration
+    const result = {
+      google_credentials: {
+        client_id_set: !!env.GOOGLE_CLIENT_ID,
+        client_secret_set: !!env.GOOGLE_CLIENT_SECRET,
+        client_id_length: env.GOOGLE_CLIENT_ID?.length || 0,
+        client_secret_length: env.GOOGLE_CLIENT_SECRET?.length || 0,
+      },
+      test_endpoints: {} as Record<string, any>,
+      timestamp: new Date().toISOString(),
+    };
+
+    // Test different possible Google OAuth endpoints
+    const testEndpoints = [
+      '/api/auth/sign-in/google',
+      '/api/auth/signin/google',
+      '/api/auth/google',
+      '/api/auth/oauth/google',
+      '/api/auth/callback/google',
+    ];
+
+    for (const endpoint of testEndpoints) {
+      try {
+        const testUrl = `http://localhost:${env.PORT}${endpoint}`;
+        const response = await fetch(testUrl, {
+          method: 'GET',
+          headers: {
+            Origin: `http://localhost:${env.PORT}`,
+          },
+        });
+
+        result.test_endpoints[endpoint] = {
+          status: response.status,
+          statusText: response.statusText,
+          available: response.status !== 404,
+        };
+      } catch (error) {
+        result.test_endpoints[endpoint] = {
+          error: error instanceof Error ? error.message : String(error),
+          available: false,
+        };
+      }
+    }
+
+    return c.json(result);
+  } catch (error) {
+    console.error('🧪 Google OAuth test failed:', error);
+
+    return c.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        timestamp: new Date().toISOString(),
+      },
+      500,
+    );
+  }
+});
+
+/**
+ * Debug OAuth State Issues
+ *
+ * Helps debug OAuth state mismatch problems
+ */
+debugApp.get('/oauth-state', async (c) => {
+  // Only allow in development or with debug header
+  const isDebugAllowed =
+    isDevelopmentEnvironment() ||
+    c.req.header('X-Debug-Token') === env.SERVICES_SECRET_KEY;
+
+  if (!isDebugAllowed) {
+    return c.json({ error: 'Debug access denied' }, 403);
+  }
+
+  try {
+    // Get current OAuth configuration
+    const result = {
+      auth_service_config: {
+        base_url: env.BETTER_AUTH_URL,
+        google_client_id: env.GOOGLE_CLIENT_ID ? 'SET' : 'NOT_SET',
+        google_client_secret: env.GOOGLE_CLIENT_SECRET ? 'SET' : 'NOT_SET',
+      },
+      oauth_urls: {
+        callback_url: `${env.BETTER_AUTH_URL}/api/auth/callback/google`,
+        redirect_to: 'http://localhost:5173/auth/callback',
+      },
+      troubleshooting: {
+        common_issues: [
+          'State mismatch: Check if session is maintained between requests',
+          'Port mismatch: Ensure frontend and auth-service ports are correct',
+          'Cookie issues: Check if cookies are being set/read properly',
+          'CORS issues: Verify CORS configuration allows frontend domain',
+        ],
+        next_steps: [
+          '1. Clear browser cookies and localStorage',
+          '2. Restart auth-service',
+          '3. Try OAuth flow again',
+          '4. Check browser network tab for errors',
+        ],
+      },
+      timestamp: new Date().toISOString(),
+    };
+
+    return c.json(result);
+  } catch (error) {
+    console.error('🧪 OAuth state debug failed:', error);
+
+    return c.json(
+      {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+        timestamp: new Date().toISOString(),
+      },
+      500,
+    );
+  }
+});
+
 export { debugApp };
