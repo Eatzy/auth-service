@@ -1,7 +1,88 @@
 import { Hono } from 'hono';
 import { env } from '../config/env';
+import { ConfigService } from '../services/config-service';
 
 const socialAuthApp = new Hono();
+
+/**
+ * Check if origin is allowed based on database configuration
+ */
+async function isOriginAllowed(origin: string): Promise<boolean> {
+  try {
+    // Get trusted origins from database (fallback to env for development)
+    const trustedOriginsConfig = await ConfigService.get(
+      'TRUSTED_ORIGINS',
+      'http://localhost:5173,http://localhost:3000,http://localhost:3001',
+    );
+
+    const allowedOriginsConfig = await ConfigService.get(
+      'ALLOWED_DOMAIN_PATTERNS',
+      '.eatsy.net,.eatzy.com,https://eatsy.net,https://eatzy.com',
+    );
+
+    // Parse trusted origins (exact matches)
+    const trustedOrigins = trustedOriginsConfig
+      ? trustedOriginsConfig.split(',').map((o) => o.trim())
+      : [];
+
+    // Parse allowed domain patterns
+    const allowedPatterns = allowedOriginsConfig
+      ? allowedOriginsConfig.split(',').map((p) => p.trim())
+      : [];
+
+    // Check exact match first
+    if (trustedOrigins.includes(origin)) {
+      console.log(`✅ Origin allowed (trusted): ${origin}`);
+      return true;
+    }
+
+    // Check domain patterns
+    for (const pattern of allowedPatterns) {
+      if (pattern.startsWith('.')) {
+        // Domain suffix pattern (e.g., .eatzy.com)
+        if (
+          origin.includes(pattern) ||
+          origin === `https://${pattern.substring(1)}`
+        ) {
+          console.log(
+            `✅ Origin allowed (domain pattern): ${origin} matches ${pattern}`,
+          );
+          return true;
+        }
+      } else if (pattern.startsWith('http')) {
+        // Full URL pattern
+        if (origin === pattern) {
+          console.log(`✅ Origin allowed (URL pattern): ${origin}`);
+          return true;
+        }
+      } else {
+        // Domain name pattern
+        if (origin.includes(pattern)) {
+          console.log(
+            `✅ Origin allowed (contains pattern): ${origin} contains ${pattern}`,
+          );
+          return true;
+        }
+      }
+    }
+
+    console.log(`❌ Origin not allowed: ${origin}`);
+    console.log(`   Trusted origins: ${trustedOrigins.join(', ')}`);
+    console.log(`   Allowed patterns: ${allowedPatterns.join(', ')}`);
+    return false;
+  } catch (error) {
+    console.error('Error checking origin permissions:', error);
+    // Fallback to hardcoded list for safety
+    const fallbackOrigins = [
+      'http://localhost:5173',
+      'http://localhost:3000',
+      'http://localhost:3001',
+    ];
+    const isEatzyDomain =
+      origin.includes('.eatzy.com') || origin === 'https://eatzy.com';
+    return fallbackOrigins.includes(origin) || isEatzyDomain;
+  }
+}
 
 /**
  * Get Google OAuth URL
@@ -36,19 +117,10 @@ socialAuthApp.get('/google/url', async (c) => {
       );
     }
 
-    // Validate origin (security check)
-    const allowedOrigins = [
-      'http://localhost:5173',
-      'http://localhost:3000',
-      'http://localhost:3001',
-    ];
+    // Validate origin using database configuration
+    const isAllowed = await isOriginAllowed(origin);
 
-    // Allow *.eatzy.com domains
-    const isEatzyDomain =
-      origin.includes('.eatzy.com') || origin === 'https://eatzy.com';
-    const isAllowedOrigin = allowedOrigins.includes(origin) || isEatzyDomain;
-
-    if (!isAllowedOrigin) {
+    if (!isAllowed) {
       console.log(`❌ Unauthorized origin: ${origin}`);
       return c.json(
         {

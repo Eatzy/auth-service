@@ -129,6 +129,206 @@ configApp.get('/category/:category', async (c) => {
   }
 });
 
+// === CORS MANAGEMENT ENDPOINTS ===
+
+// Get current CORS settings - PUBLIC
+configApp.get('/cors/settings', async (c) => {
+  try {
+    const trustedOrigins = await ConfigService.get('TRUSTED_ORIGINS', '');
+    const allowedPatterns = await ConfigService.get(
+      'ALLOWED_DOMAIN_PATTERNS',
+      '',
+    );
+
+    return c.json({
+      success: true,
+      data: {
+        trustedOrigins: trustedOrigins
+          ? trustedOrigins.split(',').map((o) => o.trim())
+          : [],
+        allowedPatterns: allowedPatterns
+          ? allowedPatterns.split(',').map((p) => p.trim())
+          : [],
+      },
+    });
+  } catch (_error) {
+    return c.json(
+      {
+        success: false,
+        error: 'Failed to fetch CORS settings',
+      },
+      500,
+    );
+  }
+});
+
+// Add trusted origin - ADMIN ONLY
+configApp.post('/cors/origins', adminAuth, async (c) => {
+  try {
+    const body = await c.req.json();
+    const { origin } = body;
+
+    if (!origin) {
+      return c.json(
+        {
+          success: false,
+          error: 'Origin is required',
+        },
+        400,
+      );
+    }
+
+    // Validate origin format
+    try {
+      new URL(origin);
+    } catch {
+      return c.json(
+        {
+          success: false,
+          error:
+            'Invalid origin format. Must be a valid URL (e.g., https://example.com)',
+        },
+        400,
+      );
+    }
+
+    const currentOrigins = await ConfigService.get('TRUSTED_ORIGINS', '');
+    const originsList = currentOrigins
+      ? currentOrigins.split(',').map((o) => o.trim())
+      : [];
+
+    if (originsList.includes(origin)) {
+      return c.json(
+        {
+          success: false,
+          error: 'Origin already exists',
+        },
+        409,
+      );
+    }
+
+    originsList.push(origin);
+    await ConfigService.set(
+      'TRUSTED_ORIGINS',
+      originsList.join(','),
+      'Comma-separated list of trusted origins for CORS',
+      'cors',
+      false,
+    );
+
+    return c.json({
+      success: true,
+      message: `Origin '${origin}' added successfully`,
+      data: { trustedOrigins: originsList },
+    });
+  } catch (_error) {
+    return c.json(
+      {
+        success: false,
+        error: 'Failed to add origin',
+      },
+      500,
+    );
+  }
+});
+
+// Remove trusted origin - ADMIN ONLY
+configApp.delete('/cors/origins', adminAuth, async (c) => {
+  try {
+    const body = await c.req.json();
+    const { origin } = body;
+
+    if (!origin) {
+      return c.json(
+        {
+          success: false,
+          error: 'Origin is required',
+        },
+        400,
+      );
+    }
+
+    const currentOrigins = await ConfigService.get('TRUSTED_ORIGINS', '');
+    const originsList = currentOrigins
+      ? currentOrigins.split(',').map((o) => o.trim())
+      : [];
+
+    const index = originsList.indexOf(origin);
+    if (index === -1) {
+      return c.json(
+        {
+          success: false,
+          error: 'Origin not found',
+        },
+        404,
+      );
+    }
+
+    originsList.splice(index, 1);
+    await ConfigService.set(
+      'TRUSTED_ORIGINS',
+      originsList.join(','),
+      'Comma-separated list of trusted origins for CORS',
+      'cors',
+      false,
+    );
+
+    return c.json({
+      success: true,
+      message: `Origin '${origin}' removed successfully`,
+      data: { trustedOrigins: originsList },
+    });
+  } catch (_error) {
+    return c.json(
+      {
+        success: false,
+        error: 'Failed to remove origin',
+      },
+      500,
+    );
+  }
+});
+
+// Update domain patterns - ADMIN ONLY
+configApp.put('/cors/patterns', adminAuth, async (c) => {
+  try {
+    const body = await c.req.json();
+    const { patterns } = body;
+
+    if (!Array.isArray(patterns)) {
+      return c.json(
+        {
+          success: false,
+          error: 'Patterns must be an array',
+        },
+        400,
+      );
+    }
+
+    await ConfigService.set(
+      'ALLOWED_DOMAIN_PATTERNS',
+      patterns.join(','),
+      'Comma-separated list of allowed domain patterns for CORS',
+      'cors',
+      false,
+    );
+
+    return c.json({
+      success: true,
+      message: 'Domain patterns updated successfully',
+      data: { allowedPatterns: patterns },
+    });
+  } catch (_error) {
+    return c.json(
+      {
+        success: false,
+        error: 'Failed to update domain patterns',
+      },
+      500,
+    );
+  }
+});
+
 // === ADMIN ENDPOINTS (Require Authorization) ===
 
 // Get all configurations including secrets - ADMIN ONLY
